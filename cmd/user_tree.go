@@ -32,3 +32,4 @@ func (ut *UserTree) Update(members []discord.Member) {
         ut.AddItem(member.User.DisplayOrUsername(), "", 0, nil)
     }
 }
+
