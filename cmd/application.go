@@ -26,7 +26,7 @@ type application struct {
 	pages        *tview.Pages
 	flex         *tview.Flex
 	guildsTree   *guildsTree
-	usersTree		 *usersTree
+	userTree		 *UserTree
 	messagesList *messagesList
 	messageInput *messageInput
 }
@@ -39,7 +39,7 @@ func newApplication(cfg *config.Config) *application {
 		pages:        tview.NewPages(),
 		flex:         tview.NewFlex(),
 		guildsTree:   newGuildsTree(cfg),
-		usersTree:		usersTree(cfg),
+		userTree:			newUserTree(cfg),
 		messagesList: newMessagesList(cfg),
 		messageInput: newMessageInput(cfg),
 	}
@@ -91,11 +91,12 @@ func (a *application) init() {
 	
 	center := tview.NewFlex().
 		AddItem(right, 0, 4, false).
-		AddItem(a.usersTree, 0, 1, false).
+		AddItem(a.userTree, 0, 1, false)
 	// The guilds tree is always focused first at start-up.
+
 	a.flex.
 		AddItem(a.guildsTree, 0, 1, true).
-		//AddItem(right, 0, 4, false)
+		//AddItem(right, 0, 4, false).
 		AddItem(center, 0, 4, false)
 
 	a.pages.AddAndSwitchToPage(flexPageName, a.flex, true)
