@@ -2,38 +2,55 @@ package cmd
 
 
 import (
-		"log/slog"
-		"sort"
-		"fmt"
+	"fmt"
+	"log/slog"
+	"sort"
 
-    "github.com/ayn2op/discordo/internal/config"
-    "github.com/ayn2op/discordo/internal/ui"
-    "github.com/ayn2op/tview"
-    "github.com/diamondburned/arikawa/v3/discord"
-		"github.com/gdamore/tcell/v2"
+	"github.com/ayn2op/discordo/internal/config"
+	"github.com/ayn2op/discordo/internal/ui"
+	"github.com/ayn2op/tview"
+	"github.com/diamondburned/arikawa/v3/discord"
+	"github.com/gdamore/tcell/v2"
 )
 
 type UserTree struct {
-    *tview.TreeView
-    cfg *config.Config
+	*tview.TreeView
+	cfg *config.Config
 }
 
 func newUserTree(cfg *config.Config) *UserTree {
-  ut := &UserTree{
-    TreeView: tview.NewTreeView(), 
-    cfg:  cfg,
-  }
-  
-  ut.Box = ui.ConfigureBox(ut.Box, &cfg.Theme) 
+	ut := &UserTree{
+		TreeView: tview.NewTreeView(),
+		cfg:      cfg,
+	}
 
-  ut.
-		SetRoot(tview.NewTreeNode("")).
+	ut.Box = ui.ConfigureBox(ut.Box, &cfg.Theme)
+	ut.SetRoot(tview.NewTreeNode("")).
 		SetTopLevel(1).
 		SetTitle("Members")
-		//planning on select func -> member modal
-		//theme soon
 
-    return ut
+	return ut
+}
+
+func getStatus(guildID discord.GuildID, userID discord.UserID) (string, bool) {
+	presence, err := discordState.Cabinet.Presence(guildID, userID)
+	if err != nil {
+		// Missing presence = offline
+		return "[gray]○ [white]", true
+	}
+
+	switch presence.Status {
+	case discord.OnlineStatus:
+		return "[green]● [white]", false
+	case "idle":
+		return "[yellow]● [white]", false
+	case "dnd":
+		return "[red]● [white]", false
+	case "offline", "invisible":
+		return "[gray]○ [white]", true
+	default:
+		return "[gray]○ [white]", true
+	}
 }
 
 func (ut *UserTree) Update(guildID discord.GuildID, members []discord.Member) {
@@ -52,53 +69,81 @@ func (ut *UserTree) Update(guildID discord.GuildID, members []discord.Member) {
 		}
 		return roles[i].ID < roles[j].ID
 	})
-	
-	// Tree Node
+
+	// Root sections
+	onlineNode := tview.NewTreeNode("Online")
+	offlineNode := tview.NewTreeNode("Offline")
+	root.AddChild(onlineNode)
+	root.AddChild(offlineNode)
+
+	classified := make(map[discord.UserID]bool)
+
+	// ONLINE by roles
 	for _, role := range roles {
 		if role.ID == discord.RoleID(guildID) || !role.Hoist {
 			continue
 		}
 
-		var roleMembers []discord.Member
+		var roleOnline []*tview.TreeNode
+		for _, m := range members {
+			if classified[m.User.ID] {
+				continue
+			}
 
-		for _, member := range members {
-			if memberHasRole(member, role.ID) {
-				roleMembers = append(roleMembers, member)
+			prefix, offline := getStatus(guildID, m.User.ID)
+			if offline {
+				continue
+			}
+
+			if memberHasRole(m, role.ID) {
+				name := m.User.DisplayOrUsername()
+				memberNode := tview.NewTreeNode(prefix + name).
+					SetColor(tcell.GetColor(role.Color.String()))
+				roleOnline = append(roleOnline, memberNode)
+				classified[m.User.ID] = true
 			}
 		}
 
-		if len(roleMembers) == 0 {
+		if len(roleOnline) > 0 {
+			roleNode := tview.NewTreeNode(fmt.Sprintf("%s (%d)", role.Name, len(roleOnline))).
+				SetColor(tcell.GetColor(role.Color.String()))
+			for _, node := range roleOnline {
+				roleNode.AddChild(node)
+			}
+			onlineNode.AddChild(roleNode)
+		}
+	}
+
+	// ONLINE without roles
+	for _, m := range members {
+		if classified[m.User.ID] {
 			continue
 		}
 
-		roleNode := tview.NewTreeNode(fmt.Sprintf("%s (%d)", role.Name, len(roleMembers))).
-			SetColor(tcell.GetColor(role.Color.String()))
-		root.AddChild(roleNode)
+		prefix, offline := getStatus(guildID, m.User.ID)
+		if offline {
+			continue
+		}
 
-		for _, member := range roleMembers {
-			memberNode := tview.NewTreeNode(member.User.DisplayOrUsername())
-			roleNode.AddChild(memberNode)
-		}
+		name := m.User.DisplayOrUsername()
+		onlineNode.AddChild(tview.NewTreeNode(prefix + name))
+		classified[m.User.ID] = true
 	}
-	
-	var unclassifiedMembers []discord.Member
-	for _, member := range members {
-		isOnlyEveryone := len(member.RoleIDs) == 1 && member.RoleIDs[0] == discord.RoleID(guildID)
-		isNoRoles := len(member.RoleIDs) == 0
 
-		if isOnlyEveryone || isNoRoles {
-			unclassifiedMembers = append(unclassifiedMembers, member)
+	// OFFLINE (everyone else)
+	for _, m := range members {
+		if classified[m.User.ID] {
+			continue
 		}
-	}
-	
-	if len(unclassifiedMembers) > 0 {
-		otherNode := tview.NewTreeNode(fmt.Sprintf("Online (%d)", len(unclassifiedMembers)))
-		root.AddChild(otherNode)
-		
-		for _, member := range unclassifiedMembers {
-			memberNode := tview.NewTreeNode(member.User.DisplayOrUsername())
-			otherNode.AddChild(memberNode)
+
+		prefix, offline := getStatus(guildID, m.User.ID)
+		if !offline {
+			continue
 		}
+
+		name := m.User.DisplayOrUsername()
+		offlineNode.AddChild(tview.NewTreeNode(prefix + name))
+		classified[m.User.ID] = true
 	}
 
 	root.Walk(func(node, parent *tview.TreeNode) bool {
@@ -107,7 +152,7 @@ func (ut *UserTree) Update(guildID discord.GuildID, members []discord.Member) {
 	})
 }
 
-//helper
+// helper
 func memberHasRole(member discord.Member, roleID discord.RoleID) bool {
 	for _, id := range member.RoleIDs {
 		if id == roleID {
@@ -116,17 +161,3 @@ func memberHasRole(member discord.Member, roleID discord.RoleID) bool {
 	}
 	return false
 }
-
-/* WIP
-func getStatusPrefix(userID discord.UserID) string {
-	presence, err :- discordState.Cabinet.Presence(userID)
-	if err != nil {
-		return ""
-	}
-
-	switch presence.Status {
-	case discord.Online:
-		return "[green]"
-	}
-}
-*/

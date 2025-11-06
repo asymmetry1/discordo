@@ -182,7 +182,7 @@ func (gt *guildsTree) onSelected(node *tview.TreeNode) {
 
 		if guildID := channel.GuildID; guildID.IsValid() {
 			app.messagesList.requestGuildMembers(guildID, messages)
-		
+
 			// borrowing this to populate member based on guild selected
 			members, err := discordState.Cabinet.Members(guildID)
 			if err != nil {
