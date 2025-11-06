@@ -43,7 +43,12 @@ func openState(token string) error {
 	discordState.AddHandler(onMessageUpdate)
 	discordState.AddHandler(onMessageDelete)
 	discordState.AddHandler(onReadUpdate)
-
+	/* For fetching members
+	discordState.AddHandler(onGuildCreate)
+	discordState.AddHandler(onGuildMembersChunk)
+	discordState.AddHandler(onGuildMemberAdd)
+	discordState.AddHandler(onGuildMemberRemove)
+	*/
 	discordState.AddHandler(func(event *gateway.GuildMembersChunkEvent) {
 		app.messagesList.setFetchingChunk(false, uint(len(event.Members)))
 	})
@@ -175,3 +180,13 @@ func onMessageDelete(message *gateway.MessageDeleteEvent) {
 		app.Draw()
 	}
 }
+
+/*
+func onGuildCreate(ev *gateway.GuildCreateEvent) {
+	if ev.Guild.Unavailable {
+		return
+	}
+
+	members, err := discordState.Cabinet.Members(ev.ID)
+}
+*/
