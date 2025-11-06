@@ -187,12 +187,12 @@ func (gt *guildsTree) onSelected(node *tview.TreeNode) {
 			members, err := discordState.Cabinet.Members(guildID)
 			if err != nil {
 				slog.Error("failed to get guild members", "err", err, "guild_id", guildID)
-				app.userTree.Update(nil)
+				app.userTree.Update(guildID, nil)
 			} else {
-				app.userTree.Update(members)
+				app.userTree.Update(guildID, members)
 			}
 		} else {
-			app.userTree.Update(nil)
+			app.userTree.Update(0, nil)
 		}
 
 		app.messagesList.reset()
